@@ -140,7 +140,7 @@ const ix = getBurnInstruction({
 
 ## Instruction Plans
 
-Handle multi-step operations (e.g., create ATA if needed). Auto-check preconditions and only include necessary instructions — use for user-facing flows. Build a plan with the `get*InstructionPlan` builders, then execute it through a plugin client that has planning + sending capability via `client.sendTransaction(plan)` (see [plugins.md](../plugins.md)). For a shorter form, `client.use(tokenProgram())` exposes `client.token.createMint(...)` / `client.token.mintToATA(...)`, which build and send in one call.
+Handle multi-step operations (e.g., create ATA if needed). Auto-check preconditions and only include necessary instructions — use for user-facing flows. Build a plan with the `get*InstructionPlan` builders, then execute it through a plugin client that has planning + sending capability via `client.sendTransaction(plan)` (see [plugins.md](../plugins.md)). For a shorter form, `client.use(tokenProgram())` exposes `client.token.instructions.createMint(...)` / `client.token.instructions.mintToATA(...)`; call `.sendTransaction()` on the returned plan to submit (e.g. `await client.token.instructions.createMint({ newMint, decimals, mintAuthority }).sendTransaction()`).
 
 ### Create Mint
 
