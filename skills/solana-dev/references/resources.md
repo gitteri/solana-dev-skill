@@ -60,6 +60,13 @@ description: Authoritative Solana learning platforms, documentation, tooling ref
 - [Mollusk Repository](https://github.com/anza-xyz/mollusk)
 - [mollusk-svm crate](https://crates.io/crates/mollusk-svm)
 
+### Fuzzing
+- [Trident (Ackee Solana fuzzer)](https://ackee.xyz/trident/docs/latest/)
+- [Trident Repository](https://github.com/Ackee-Blockchain/trident)
+
+## Dev Tooling
+- [cargo-expand (roll out macros to review generated code)](https://github.com/dtolnay/cargo-expand)
+
 ## IDLs and Codegen
 - [Codama Repository](https://github.com/codama-idl/codama)
 - [Codama Generating Clients](https://solana.com/docs/programs/codama-generating-clients)
@@ -76,11 +83,16 @@ description: Authoritative Solana learning platforms, documentation, tooling ref
 
 ## Security
 - [Blueshift Program Security Course](https://learn.blueshift.gg/en/courses/program-security)
+- [r0bre's 100 Daily Solana Tips (accretionxyz)](https://accretionxyz.substack.com/p/r0bres-100-daily-solana-tips) - program design, security, and best-practice tips (distilled into [security.md](security.md) and [program-design-patterns.md](program-design-patterns.md))
 
 ## Performance and Optimization
 - [Solana Optimized Programs](https://github.com/Laugharne/solana_optimized_programs)
-- [sBPF Assembly SDK](https://github.com/blueshift-gg/sbpf)
+- [sBPF Assembly SDK (blueshift)](https://github.com/blueshift-gg/sbpf)
+- [sbpf (deanmlittle) — write/optimize programs in sBPF assembly](https://github.com/deanmlittle/sbpf)
 - [Doppler Oracle (21 CU)](https://github.com/blueshift-gg/doppler)
+
+## Cryptography Primer
+- [Elliptic Curve Cryptography visual primer](https://curves.xargs.org)
 
 ## Agent Skills
 - [Agent Skills Specification](https://agentskills.io/specification)

@@ -173,6 +173,7 @@ Surfpool also ships its own MCP server (`surfpool mcp`, stdio) for driving local
 - Legacy web3.js routing (v3 status + migration skill): [kit-web3-interop.md](references/kit-web3-interop.md)
 - Anchor programs: [programs/anchor.md](references/programs/anchor.md)
 - Pinocchio programs: [programs/pinocchio.md](references/programs/pinocchio.md)
+- Program design patterns (state layout, PDAs, parallelization, cranks, ergonomics): [program-design-patterns.md](references/program-design-patterns.md)
 - Testing strategy (Surfpool/LiteSVM/Mollusk): [testing.md](references/testing.md)
 - IDLs + codegen: [idl-codegen.md](references/idl-codegen.md)
 - Payments: [payments.md](references/payments.md)
