@@ -69,6 +69,7 @@ skills/solana-dev/
     ├── idl-codegen.md               # IDL and client generation
     ├── payments.md                  # Payments (Kit, Solana Pay, Kora)
     ├── security.md                  # Security vulnerabilities & prevention
+    ├── program-design-patterns.md   # Program architecture, CU/CPI limits, account lifecycle
     ├── resources.md                 # Curated reference links
     ├── compatibility-matrix.md      # Version compatibility tables (Anchor/Solana/Rust/GLIBC)
     ├── common-errors.md             # Error message → solution mappings

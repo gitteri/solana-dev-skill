@@ -55,9 +55,9 @@ Whenever a program has phases (launch: `Initialized → Collecting → Launched 
 - **Zero copy for large / hot accounts:** `#[account(zero_copy)]` + `AccountLoader`, with `load()` / `load_mut()` / `load_init()`, to overlay structure on bytes without deserializing.
 - **`LazyAccount` (Anchor 0.31+)** reads a single field from a large account without full deserialization: `ctx.accounts.my_account.load_authority()?`.
 - **Benchmark CU** with `sol_log_compute_units()` or the `compute_fn!` macro to find expensive instructions; set `setComputeUnitLimit` from simulation and `setComputeUnitPrice` for priority fees.
-- **Address Lookup Tables (ALTs):** the ~1,232-byte tx limit caps you near ~30 addresses; ALTs hold up to 256 addresses on-chain, referenced in v0 transactions (up to 64 per tx). Essential for instructions that touch many accounts.
+- **Address Lookup Tables (ALTs):** the ~1,232-byte tx limit caps a legacy transaction near ~30 addresses; an ALT stores up to 256 addresses on-chain and a v0 transaction references each by a 1-byte index instead of a 32-byte pubkey. This buys transaction *size*, not more accounts — the 64 account-locks-per-transaction cap still applies.
 - **Stack (4KB) / heap (32KB) discipline:** `Box<>` accounts onto the heap, split functions to get fresh stack frames, lean on `remaining_accounts`, or go zero-copy. The default bump allocator never frees; for larger programs implement a `#[global_allocator]`.
-- **CU budget model:** every instruction gets 200k CU by default; raise (up to 1.4M/tx) or lower it via the ComputeBudget program, and set a priority fee (µlamports/CU) to prioritize landing. You pay for the *requested* allotment, so simulate, measure actual usage, and request close to it — over-requesting overpays.
+- **CU budget model:** the limit is transaction-wide, not per instruction. With no ComputeBudget instruction, a transaction gets `200k × (number of non-ComputeBudget instructions)`, capped at 1.4M. `SetComputeUnitLimit` replaces that with a single explicit transaction-wide limit (max 1.4M), and `SetComputeUnitPrice` sets the priority fee in µlamports/CU. You pay for the *requested* allotment, so simulate, measure actual usage, and request close to it — over-requesting overpays.
 - **CU fluctuates for the same instruction**, usually due to PDA bump search: `find_program_address` retries bumps until it finds an off-curve one, so cost varies. Store the canonical bump and validate with `create_program_address` to avoid the search on the hot path.
 - **Drop to C or assembly for hot paths.** Anchor is bloated in size and CU; native/Pinocchio, hand-written C (official `solana_sdk.h` examples exist), or sBPF assembly (deanmlittle's `sbpf`) produce tiny, fast programs. You can also keep Rust and optimize critical functions with inline asm.
 
@@ -68,17 +68,17 @@ Design around these when composing programs:
 | Limit | Value |
 |-------|-------|
 | CPI call depth | 4 (A→B→C→D, no further) |
-| CPIs per transaction (trace length) | 63 (includes all instructions in the tx) |
+| Instruction trace length per transaction | 64 (top-level instructions + every CPI) |
 | Account locks per transaction | 64 |
-| Account size growth per CPI | +10 KB max |
+| Account size growth per instruction | +10,240 bytes (`MAX_PERMITTED_DATA_INCREASE`) |
 | Signer seeds per PDA | 16 seeds, ≤32 bytes each |
-| Shared CU per transaction | 200k default / 1.4M with ComputeBudget |
+| Transaction CU limit | 200k × non-ComputeBudget instruction count, capped at 1.4M; `SetComputeUnitLimit` overrides with one tx-wide value |
 
 Also: the callee program and every account it touches must appear at the top level of the transaction (ALTs help pack them). Self-reentrancy (A→A) is allowed; A→B→A is blocked by the runtime. When doing direct lamport changes before a CPI, include **all** changed-lamport accounts in the CPI (or none) or the runtime's balance check fails.
 
 ## Account lifecycle & size
 
-- **10MB account max.** PDAs grow at most 10,240 bytes per CPI — realloc in increments for larger accounts, or use keypair accounts with `#[account(zero)]`.
+- **10MB account max.** A single instruction can grow any account by at most 10,240 bytes (`MAX_PERMITTED_DATA_INCREASE`) — this is per instruction, top-level and CPI alike, so repeated CPIs within one instruction do not each get a fresh allowance. Realloc across successive instructions or transactions to reach larger sizes, or use keypair accounts with `#[account(zero)]`.
 - **Close accounts properly** (Anchor `close` constraint): zero data, assign to system program, realloc to 0. Don't just zero lamports (see revival attacks in security.md).
 - **Manual account creation** to dodge the `create_account` griefing footgun: `allocate` + `transfer` rent + `assign`, rather than `create_account` (which anyone can block by pre-funding 1 lamport).
 

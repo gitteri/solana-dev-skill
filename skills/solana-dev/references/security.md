@@ -609,7 +609,7 @@ One missing check = one critical.
 
 **Risk**: `as` casts silently truncate (e.g. `u64 as u32`), corrupting financial values.
 
-**Prevention**: Prefer `::from` / `::into`. If you must use `as`, prove mathematically that truncation cannot occur for the value's real range.
+**Prevention**: For narrowing conversions use `TryFrom` / `try_from` and map the error to a program error — `From` / `Into` only exist for widening conversions, so there is no infallible `u64 → u32`. If you must use `as`, prove mathematically that truncation cannot occur for the value's real range.
 
 ---
 
@@ -718,9 +718,11 @@ When an AI agent is generating or executing Solana code on the user's behalf:
 24. Does any mechanism rely on on-chain randomness?
 25. Does every rounding site round in the protocol's favor?
 26. Are there unchecked `as` casts that could truncate financial values?
-27. Is every `unsafe` block minimal, documented, and sound on alignment/bounds?
-28. Can an instruction be frontrun — including initialization frontrunning of a target address?
-29. Does the program assume a benign RPC (no sandwich/observation protection for users)?
-30. Are accounts reloaded after CPIs (and writes serialized before CPIs that read them)?
-31. When invoking a user-supplied program, are non-mutated accounts withheld or read-only, and self-reentrancy blocked?
-32. Is any account trusted as a type based only on a point-in-time owner check (transient owner attack)?
+27. Does the program compose with an upgradeable external program that could change behavior under it, and are those CPIs given minimum privileges?
+28. Is every `unsafe` block minimal, documented, and sound on alignment/bounds?
+29. Can an instruction be frontrun — including initialization frontrunning of a target address?
+30. Does the program assume a benign RPC (no sandwich/observation protection for users)?
+31. Are accounts reloaded after CPIs (and writes serialized before CPIs that read them)?
+32. When invoking a user-supplied program, are non-mutated accounts withheld or read-only, and self-reentrancy blocked?
+33. Is any account trusted as a type based only on a point-in-time owner check (transient owner attack)?
+34. Is every author-side rug vector closed — upgrade authority, hard-coded caps the admin cannot exceed, reviewed dependencies, no backdoor paths in test modules, reproducible builds?
