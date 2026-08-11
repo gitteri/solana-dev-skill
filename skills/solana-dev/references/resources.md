@@ -64,9 +64,6 @@ description: Authoritative Solana learning platforms, documentation, tooling ref
 - [Trident (Ackee Solana fuzzer)](https://ackee.xyz/trident/docs/latest/)
 - [Trident Repository](https://github.com/Ackee-Blockchain/trident)
 
-## Dev Tooling
-- [cargo-expand (roll out macros to review generated code)](https://github.com/dtolnay/cargo-expand)
-
 ## IDLs and Codegen
 - [Codama Repository](https://github.com/codama-idl/codama)
 - [Codama Generating Clients](https://solana.com/docs/programs/codama-generating-clients)
@@ -83,7 +80,14 @@ description: Authoritative Solana learning platforms, documentation, tooling ref
 
 ## Security
 - [Blueshift Program Security Course](https://learn.blueshift.gg/en/courses/program-security)
-- [r0bre's 100 Daily Solana Tips (accretionxyz)](https://accretionxyz.substack.com/p/r0bres-100-daily-solana-tips) - program design, security, and best-practice tips (distilled into [security.md](security.md) and [program-design-patterns.md](program-design-patterns.md))
+- [r0bre's 100 Daily Solana Tips (accretionxyz)](https://accretionxyz.substack.com/p/r0bres-100-daily-solana-tips) - program design, security, and best-practice tips (distilled into [security.md](security.md) and [programs/design-patterns.md](programs/design-patterns.md))
+- [cargo-expand (roll out macros to review generated code)](https://github.com/dtolnay/cargo-expand)
+
+## Reference Programs Worth Reading
+Well-built production programs to read for structure and conventions:
+- Squads Protocol v4 (Anchor)
+- Sanctum's S (non-Anchor)
+- Ellipsis Labs' Plasma and gavel (non-Anchor)
 
 ## Performance and Optimization
 - [Solana Optimized Programs](https://github.com/Laugharne/solana_optimized_programs)

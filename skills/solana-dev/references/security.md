@@ -529,9 +529,9 @@ One missing check = one critical.
 
 ---
 
-## Additional Attack Vectors (Field Notes)
+## Additional Vulnerability Categories (19–36)
 
-> Distilled from r0bre's *100 Daily Solana Tips* (accretionxyz): https://accretionxyz.substack.com/p/r0bres-100-daily-solana-tips — vectors not already covered by the core categories above.
+Vectors beyond the core categories above: composition and CPI hazards, ordering and timing attacks, arithmetic and rounding, and author-side trust.
 
 ### 19. Unvalidated `remaining_accounts`
 

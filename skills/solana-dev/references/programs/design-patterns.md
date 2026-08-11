@@ -3,9 +3,9 @@ title: Program Design Patterns
 description: Field-tested Solana program design and code-organization patterns covering state layout, PDA seeds, parallelization, account lifecycle, events, cranks, and Rust/Anchor ergonomics.
 ---
 
-# Program Design Patterns (Field Notes)
+# Program Design Patterns
 
-Distilled from r0bre's *100 Daily Solana Tips* (accretionxyz), keeping the patterns that are design/architecture guidance rather than the pure-vulnerability material in [security.md](security.md). Source: https://accretionxyz.substack.com/p/r0bres-100-daily-solana-tips
+Architecture and code-organization guidance for on-chain programs. For vulnerability categories and their preventions, see [../security.md](../security.md); for runtime mechanics (rent, PDAs, wire format), see [../concepts.md](../concepts.md).
 
 ## Project & code structure
 
@@ -13,10 +13,9 @@ Distilled from r0bre's *100 Daily Solana Tips* (accretionxyz), keeping the patte
 - **Prefer simple `has_one` for direct comparisons;** push complex checks into separate validation functions with custom error codes rather than cramming everything into constraints.
 - **Write many custom error codes** — one per distinct failure point in constraints/validations/logic — and a test per error path. Coverage of failure modes matters as much as happy-path coverage.
 - **Docstrings pull their weight.** `//` for regular comments, `///` for docstrings (markdown-aware). Docstrings surface in the IDL and in editor hovers.
-- **Learn from well-built programs.** Squads Protocol v4 (Anchor), Sanctum's S, Ellipsis Labs' Plasma/gavel (non-Anchor) are worth reading.
 - **Lint regularly:** `cargo clippy --all -- -W clippy::all -W clippy::pedantic`.
 
-### Naming (underrated, high-leverage)
+### Naming
 
 Bad naming is invisible to the author and painful to every reviewer/auditor. Conventions that pay off:
 
@@ -36,6 +35,21 @@ Bad naming is invisible to the author and painful to every reviewer/auditor. Con
 - **Custom traits on account structs** to share authorization/validation logic across instructions and cut duplication.
 - **Nested account sub-structs** inside your `Accounts` struct (e.g. group `global + admin_signer`) so shared constraints are written once, not copy-pasted.
 
+```rust
+#[account]
+pub struct Pool {
+    // Fixed-size fields first so `memcmp` offsets stay stable across upgrades.
+    pub authority: Pubkey,
+    pub mint: Pubkey,
+    pub fee_bps: u16,
+    pub bump: u8,
+    // Space claimed up front so later fields can be added without a layout break.
+    pub _reserved: [u8; 64],
+    // Variable-size fields last.
+    pub participants: Vec<Pubkey>,
+}
+```
+
 ### Explicit state machines
 
 Whenever a program has phases (launch: `Initialized → Collecting → Launched | Failed`; proposal: `Draft → Voting → Executed`), model them as an **enum**, not as ad-hoc checks over timestamps and balances (that path is where state bugs breed).
@@ -43,6 +57,33 @@ Whenever a program has phases (launch: `Initialized → Collecting → Launched 
 - Define **state-transition methods as `impl`s on the enum** — each performs the transition only if all conditions hold, then returns the next state.
 - Rust enum variants can **carry data**: `Launched { committed: u64 }` encodes a value that only exists in that state.
 - Drive instruction logic with `match` on the state so unhandled transitions are compile-time visible. Pedantic use of this pattern closes most "unclear state" bug classes.
+
+```rust
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, PartialEq)]
+pub enum LaunchState {
+    Initialized,
+    Collecting { deadline: i64 },
+    Launched { committed: u64 },
+    Failed,
+}
+
+impl LaunchState {
+    pub fn finish_collecting(self, now: i64, raised: u64, target: u64) -> Result<Self> {
+        match self {
+            LaunchState::Collecting { deadline } => {
+                require!(now >= deadline, LaunchError::TooEarly);
+                Ok(if raised >= target {
+                    LaunchState::Launched { committed: raised }
+                } else {
+                    LaunchState::Failed
+                })
+            }
+            // Every other state is a rejected transition, visible at compile time.
+            _ => err!(LaunchError::InvalidTransition),
+        }
+    }
+}
+```
 
 ## PDA seed conventions
 
@@ -52,12 +93,11 @@ Whenever a program has phases (launch: `Initialized → Collecting → Launched 
 ## Performance, compute & transaction size
 
 - **Parallelization is a design constraint, not an afterthought.** Solana runs txns that only *read* a shared account in parallel but *serializes* any that *write* it. Hot write-locked accounts (fee treasuries, shared pools, global counters) are throughput chokepoints — **shard them** using an identifier derived from pubkey bytes, and reconcile shards out-of-band.
-- **Zero copy for large / hot accounts:** `#[account(zero_copy)]` + `AccountLoader`, with `load()` / `load_mut()` / `load_init()`, to overlay structure on bytes without deserializing.
-- **`LazyAccount` (Anchor 0.31+)** reads a single field from a large account without full deserialization: `ctx.accounts.my_account.load_authority()?`.
-- **Benchmark CU** with `sol_log_compute_units()` or the `compute_fn!` macro to find expensive instructions; set `setComputeUnitLimit` from simulation and `setComputeUnitPrice` for priority fees.
+- **Reach for zero-copy when an account is large or hot** (deserialization cost dominates) and for **`LazyAccount`** when an instruction needs one field out of a big struct. Syntax and code for both: [anchor.md](anchor.md).
+- **Benchmark CU** with `sol_log_compute_units()` or the `compute_fn!` macro to find expensive instructions, then set the limit from simulation. Client-side instructions: [../kit/programs/compute-budget.md](../kit/programs/compute-budget.md).
 - **Address Lookup Tables (ALTs):** the ~1,232-byte tx limit caps a legacy transaction near ~30 addresses; an ALT stores up to 256 addresses on-chain and a v0 transaction references each by a 1-byte index instead of a 32-byte pubkey. This buys transaction *size*, not more accounts — the 64 account-locks-per-transaction cap still applies.
 - **Stack (4KB) / heap (32KB) discipline:** `Box<>` accounts onto the heap, split functions to get fresh stack frames, lean on `remaining_accounts`, or go zero-copy. The default bump allocator never frees; for larger programs implement a `#[global_allocator]`.
-- **CU budget model:** the limit is transaction-wide, not per instruction. With no ComputeBudget instruction, a transaction gets `200k × (number of non-ComputeBudget instructions)`, capped at 1.4M. `SetComputeUnitLimit` replaces that with a single explicit transaction-wide limit (max 1.4M), and `SetComputeUnitPrice` sets the priority fee in µlamports/CU. You pay for the *requested* allotment, so simulate, measure actual usage, and request close to it — over-requesting overpays.
+- **Budget CU as a transaction-wide resource, not a per-instruction one** — see the table below for the exact model. The design consequence: batching instructions into one transaction spends from a shared, capped pool, so a "just add another instruction" refactor can push an already-tight transaction over the ceiling.
 - **CU fluctuates for the same instruction**, usually due to PDA bump search: `find_program_address` retries bumps until it finds an off-curve one, so cost varies. Store the canonical bump and validate with `create_program_address` to avoid the search on the hot path.
 - **Drop to C or assembly for hot paths.** Anchor is bloated in size and CU; native/Pinocchio, hand-written C (official `solana_sdk.h` examples exist), or sBPF assembly (deanmlittle's `sbpf`) produce tiny, fast programs. You can also keep Rust and optimize critical functions with inline asm.
 
@@ -79,12 +119,12 @@ Also: the callee program and every account it touches must appear at the top lev
 ## Account lifecycle & size
 
 - **10MB account max.** A single instruction can grow any account by at most 10,240 bytes (`MAX_PERMITTED_DATA_INCREASE`) — this is per instruction, top-level and CPI alike, so repeated CPIs within one instruction do not each get a fresh allowance. Realloc across successive instructions or transactions to reach larger sizes, or use keypair accounts with `#[account(zero)]`.
-- **Close accounts properly** (Anchor `close` constraint): zero data, assign to system program, realloc to 0. Don't just zero lamports (see revival attacks in security.md).
+- **Close accounts properly** (Anchor `close` constraint): zero data, assign to system program, realloc to 0. Don't just zero lamports (see revival attacks in [../security.md](../security.md)).
 - **Manual account creation** to dodge the `create_account` griefing footgun: `allocate` + `transfer` rent + `assign`, rather than `create_account` (which anyone can block by pre-funding 1 lamport).
 
 ## Events, logging & monitoring
 
-- **Emit events, don't rely on string logs.** Use `emit_cpi!` (noop-program CPI) rather than syscall logging — call-data isn't truncated and is cheap. Never parse logs for critical data (they can be injected/spoofed — see security.md).
+- **Emit events, don't rely on string logs.** Use `emit_cpi!` (noop-program CPI) rather than syscall logging — call-data isn't truncated and is cheap. Never parse logs for critical data (they can be injected/spoofed — see [../security.md](../security.md)).
 - **Event sequence numbers:** increment a counter on an account per event so indexers can detect skipped/reordered events beyond timestamp sorting.
 - **Monitoring:** poll accounts on an interval using the program's IDL; watch instruction calls, account state, TVL, fees, and events.
 
@@ -92,7 +132,7 @@ Also: the callee program and every account it touches must appear at the top lev
 
 - **Separate payer and authority.** Let the fee-paying signer differ from the authorizing signer — improves composability when a PDA can't fund itself.
 - **Whitelisting options:** NFT gating (check `amount == 1`), whitelist PDAs seeded by user address, merkle proofs, or a `Vec<Pubkey>`. Pick per scale.
-- **Multi-program architecture** for privilege separation and independent upgrades — mind the 4-level CPI depth limit and 63-CPI limit.
+- **Multi-program architecture** for privilege separation and independent upgrades — mind the 4-level CPI depth limit and the 64-instruction trace length.
 - **Counterparty risk on external programs:** prefer non-upgradeable dependencies; when calling upgradeable programs, pass the minimum privileges (read-only accounts where possible).
 
 ## Operational patterns
@@ -108,7 +148,27 @@ Also: the callee program and every account it touches must appear at the top lev
 - **Redundant checks cost CU:** double-checking a relationship via both seeds and `has_one` on immutable fields wastes CU — pick one (though deliberate redundancy can be a safety choice).
 - **`fallback` function** to handle unmatched instruction discriminators:
   `pub fn fallback(program_id: &Pubkey, accounts: &[AccountInfo], data: &[u8]) -> ProgramResult {}`
-- **Newtypes for type safety on `u64`.** A bare `u64` is used for lamports, token amounts, slots — easy to cross wires. `type Lamports = u64;` does *not* enforce anything; use a wrapper struct `struct Lamports(u64);` (access `.0`) and hang domain methods on it (`apply_fee`, etc.) so amounts can't be intermixed by accident.
+- **Newtypes for type safety on `u64`.** A bare `u64` is used for lamports, token amounts, slots — easy to cross wires. `type Lamports = u64;` does *not* enforce anything; use a wrapper struct and hang domain methods on it so amounts can't be intermixed by accident:
+
+  ```rust
+  #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy)]
+  pub struct Lamports(pub u64);
+
+  #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy)]
+  pub struct TokenAmount(pub u64);
+
+  impl Lamports {
+      pub fn apply_fee(self, fee_bps: u16) -> Result<Self> {
+          let fee = (self.0 as u128)
+              .checked_mul(fee_bps as u128)
+              .and_then(|v| v.checked_div(10_000))
+              .ok_or(ErrorCode::MathOverflow)?;
+          Ok(Lamports(self.0.checked_sub(fee as u64).ok_or(ErrorCode::MathOverflow)?))
+      }
+  }
+
+  // Passing a TokenAmount where Lamports is expected is now a compile error.
+  ```
 - **Understand the Context lifetimes (`'a, 'b, 'c, 'info`).** They're relative lifetimes on `Context`'s reference fields (`program_id`, `accounts`, `remaining_accounts`). A bound like `'c: 'info` means "`'c` lives at least as long as `'info`" — the `remaining_accounts` reference can't outlive the `AccountInfo` data it points into. `'info` is the same lifetime used across your `#[derive(Accounts)]` struct.
 - **Write your own macros to kill copy-paste bugs.** Repeated fee math / token transfers / safe-math copied 10× is where copy-paste bugs live. A single macro (declarative, derive, or attribute — e.g. an `admin_only` constraint, a CU-logging wrapper, an account-size derive) gives you one sound implementation to reuse. Auditors: `cargo expand` rolls macros out to real code for review.
 
@@ -127,13 +187,3 @@ Flashloans — and any "extend value now, guarantee repayment within the same tr
 - This enforces strict `borrow → use → repay` and blocks `borrow-borrow-repay`, `borrow-…-change-settings-…-repay`, and similar interleavings. The next interaction with your program after `borrow` must be the matching `repay`.
 
 The same introspection technique generalizes to any mechanism that must guarantee a settlement/repayment instruction lands later in the same transaction.
-
-## Runtime & concept quick-reference
-
-Load-bearing facts worth keeping straight:
-
-- **Rent = a fully-redeemable deposit.** The "rent" on an account is the rent-exempt minimum (≈2 years of storage); since the *Disable rent fees collection* feature, no ongoing rent is charged and any tx creating a non-exempt account fails. You get the full deposit back on close. `solana rent <bytes>` shows the amount.
-- **Keys / off-curve PDAs.** Solana uses Ed25519. A private key is a secret scalar `k`; the public key is `k·P` on the curve (easy forward, infeasible to invert). **PDAs are addresses deliberately *off* the curve** — no scalar maps to them, so they have no private key and can only be "signed" for by their owning program via seeds. (Primer: https://curves.xargs.org)
-- **Entrypoint dispatch.** The runtime doesn't use the ELF entrypoint; it calls the function registered under key `0x71E3CF81` (murmur3 hash of `"entrypoint"`). Include dependency programs with the `no-entrypoint` feature so you don't define two.
-- **On-chain crypto is available and cheap-ish.** Native programs `Ed25519SigVerify…`, `KeccakSecp256k…` (ECDSA, for ETH/BTC interop), `Secp256r1SigVerify…` (hardware keys); syscalls for sha256/keccak256/blake3/poseidon, `secp256k1_recover`, alt_bn128 ops (ZK), and big-mod-exp. Enables on-chain signature verification, bridges, and ZK proof verification.
-- **Transaction wire format.** A tx is a short-vec of 64-byte signatures + a message. A legacy message packs a 3-byte header (offsets that quarter the account list into writable/readonly × signer/non-signer), the account-address short-vec, a recent blockhash, and an instruction short-vec (each instruction stores a program-id **index**, account **indexes**, and data). Consequence: writability/signer/readonly is a property of the account **across the whole transaction**, and reusing an already-present account in another instruction adds only ~1 byte.
