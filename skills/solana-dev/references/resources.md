@@ -63,6 +63,7 @@ description: Authoritative Solana learning platforms, documentation, tooling ref
 ### Fuzzing
 - [Trident (Ackee Solana fuzzer)](https://ackee.xyz/trident/docs/latest/)
 - [Trident Repository](https://github.com/Ackee-Blockchain/trident)
+- [Crucible Repository](https://github.com/asymmetric-research/crucible)
 
 ## IDLs and Codegen
 - [Codama Repository](https://github.com/codama-idl/codama)

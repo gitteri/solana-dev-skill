@@ -89,6 +89,7 @@ impl LaunchState {
 
 - **Seed pattern:** static string + separator + pubkeys + numeric IDs, e.g. `["pool:", mint.key()]`. Avoid variable-length strings anywhere but the very end.
 - **`Option` gotcha (Anchor):** Anchor encodes `Option<Account>` using the *program's own ID* as `None`. Consequence: you cannot register the currently-executing program as a `Some` optional account.
+- **Validation of PDAs:** always validate the PDA's owning program's ID against the expected program's ID (e.g., your program's ID).
 
 ## Performance, compute & transaction size
 
@@ -175,7 +176,7 @@ Also: the callee program and every account it touches must appear at the top lev
 ## Vault topology
 
 - **Unified vault** (one global PDA for all deposits): simple TVL, but concentrates risk and creates a write-lock chokepoint.
-- **Multi-vault** (per-pool or per-user): isolates risk and parallelizes writes, at the cost of more complex TVL aggregation. The right choice depends on your parallelism and risk-isolation needs.
+- **Multi-vault** (per-pool or per-user): isolates risk and parallelizes writes, at the cost of more complex TVL aggregation and higher rent costs. The right choice depends on your parallelism and risk-isolation needs.
 
 ## In-transaction credit (flashloan pattern)
 
