@@ -86,9 +86,9 @@ description: Authoritative Solana learning platforms, documentation, tooling ref
 
 ## Reference Programs Worth Reading
 Well-built production programs to read for structure and conventions:
-- Squads Protocol v4 (Anchor)
-- Sanctum's S (non-Anchor)
-- Ellipsis Labs' Plasma and gavel (non-Anchor)
+- [Squads Protocol v4 (Anchor)](https://github.com/Squads-Protocol/v4)
+- [Sanctum's S (non-Anchor)](https://github.com/igneous-labs/S)
+- [Ellipsis Labs' Plasma and gavel (non-Anchor)](https://github.com/Ellipsis-Labs/plasma)
 
 ## Performance and Optimization
 - [Solana Optimized Programs](https://github.com/Laugharne/solana_optimized_programs)
